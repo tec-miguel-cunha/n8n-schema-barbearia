@@ -1,0 +1,26 @@
+id,nome,categoria,descricao,preco,stock_lisboa,stock_porto,stock_alferia,tags,referencia
+P001,Wahl Magic Clip Cordless,Máquinas de Corte,Máquina sem fio profissional.,149.90,3,2,1,wahl magic clip,FTH-DE-100
+P002,Babyliss Pro FX870 Skeleton,Máquinas de Corte,Máquina skeleton premium.,189.90,2,1,0,babyliss fx870,FTH-DE-101
+P003,Andis Master Cordless MLC,Máquinas de Corte,Máquina Andis sem fio.,219.90,1,2,1,andis master,FTH-DE-102
+P004,Hey Joe! Premium Classic Razor,Navalhas,Navalha clássica premium.,34.90,5,4,3,hey joe navalha,FTH-NA-200
+P005,Feather Artist Club SS,Navalhas,Navalha Feather SS.,89.90,2,1,1,feather artist,FTH-NA-201
+P006,Lâminas Feather Double Edge 100un,Lâminas,Caixa 100 lâminas.,19.90,10,8,6,feather lâminas,FTH-LM-300
+P007,Lâminas Dorco Meia-Lâmina 100un,Lâminas,Lâminas Dorco.,12.90,15,12,8,dorco,FTH-LM-301
+P008,Lâminas Merkur 10un,Lâminas,Pacote 10 unidades.,4.90,20,18,12,merkur,FTH-LM-302
+P009,Proraso Creme Barbear Pele Sensível,Cremes,Creme para pele sensível.,8.90,12,10,8,proraso creme,FTH-CR-400
+P010,Proraso Espuma Barbear Clássica,Cremes,Espuma clássica.,7.50,10,9,6,proraso espuma,FTH-CR-401
+P011,TOBS Sandalwood Shaving Cream,Cremes,Creme sandalwood.,14.90,6,5,3,tobs,FTH-CR-402
+P012,Captain Cook Óleo Pré-Barba,Óleos,Óleo pré-barba.,9.90,8,7,5,captain cook óleo,FTH-OL-500
+P013,Captain Cook Bálsamo Pós-Barba,Óleos,Bálsamo pós-barba.,11.90,7,6,4,captain cook bálsamo,FTH-OL-501
+P014,Captain Cook Óleo para Barba,Óleos,Óleo para barba.,9.90,9,8,5,óleo barba,FTH-OL-502
+P015,Pincel Barbear Pelo de Texugo,Pincéis,Pincel pelo texugo.,29.90,4,3,2,pincel texugo,FTH-PN-600
+P016,Pincel Barbear Sintético Premium,Pincéis,Pincel sintético.,18.90,6,5,4,pincel sintético,FTH-PN-601
+P017,Gillette Fusion ProGlide 4un,Lâminas,Recarga Gillette.,13.90,15,14,10,gillette,FTH-LM-303
+P018,Pomada Captain Cook Fixação Suave,Pomadas,Pomada fixação suave.,11.90,8,7,5,pomada captain,FTH-PM-700
+P019,Pomada Captain Cook Mate,Pomadas,Pomada mate.,11.90,7,6,4,pomada mate,FTH-PM-701
+P020,Wax Barberalia Strong Hold,Pomadas,Cera forte.,9.90,6,5,3,wax barberalia,FTH-PM-702
+P021,Shampoo Barba Captain Cook 250ml,Shampoos,Shampoo barba.,10.90,8,7,5,shampoo barba,FTH-SH-800
+P022,Navalheira de Couro Premium,Acessórios,Estojo couro.,24.90,4,3,2,navalheira,FTH-AC-900
+P023,Kit Iniciante Barbear Clássico,Kits,Kit iniciante.,59.90,3,2,1,kit iniciante,FTH-KT-001
+P024,Escova Barbeiro Fade Brush,Acessórios,Escova fade.,7.90,10,9,7,escova,FTH-AC-901
+P025,Pente Barba e Bigode Captain Cook,Acessórios,Pente barba.,6.90,12,10,8,pente,FTH-AC-902

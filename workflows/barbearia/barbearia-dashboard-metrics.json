@@ -1,0 +1,90 @@
+{
+  "name": "Barbearia — GET Metrics",
+  "meta": {
+    "templateCredsSetupCompleted": false
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "nodes": [
+    {
+      "parameters": {
+        "path": "metrics",
+        "httpMethod": "GET",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "e381513d-07b9-41bb-a66b-168eeb5682de",
+      "name": "Webhook_GET",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        0,
+        300
+      ],
+      "webhookId": "metrics"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "/**\n * GET /webhook/metrics — aggregate CONVERSAS / ESCALADAS (UTC day).\n * Env: AIRTABLE_TOKEN, AIRTABLE_BASE_ID\n */\nasync function metricsDashboard() {\n  const http = this.helpers.httpRequest.bind(this.helpers);\n  const E = (k, d = '') => ($env[k] !== undefined && $env[k] !== '' ? $env[k] : d);\n  const token = E('AIRTABLE_TOKEN');\n  const baseId = E('AIRTABLE_BASE_ID');\n  const T_CONV = E('AIRTABLE_TBL_CONVERSAS') || 'CONVERSAS';\n  const T_ESC = E('AIRTABLE_TBL_ESCALADAS') || 'ESCALADAS';\n  const auth = { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' };\n\n  if (!token || !baseId) {\n    console.error(JSON.stringify({ scope: 'barbearia.metrics', level: 'error', message: 'MISSING_ENV' }));\n    return [\n      {\n        json: {\n          messages_today: 0,\n          resolution_rate: 0,\n          active_escalations: 0,\n          voice_calls_today: 0,\n          messages_by_hour: Array(24).fill(0),\n          _errorCode: 'MISSING_ENV',\n        },\n      },\n    ];\n  }\n\n  const retryGet = async (url) => {\n    let last;\n    for (let i = 0; i < 4; i++) {\n      try {\n        return await http({ method: 'GET', url, headers: auth, json: true, timeout: 60000 });\n      } catch (e) {\n        last = e;\n        const c = e.statusCode || e.status || 0;\n        const retryable = !c || c === 429 || c >= 500;\n        if (!retryable || i === 3) throw e;\n        await new Promise((r) => setTimeout(r, 400 * Math.pow(2, i)));\n      }\n    }\n    throw last;\n  };\n\n  async function listAll(table) {\n    const rows = [];\n    let offset = '';\n    do {\n      const qs = new URLSearchParams();\n      if (offset) qs.set('offset', offset);\n      const url = `https://api.airtable.com/v0/${baseId}/${encodeURIComponent(table)}?${qs}`;\n      const res = await retryGet(url);\n      rows.push(...(res.records || []));\n      offset = res.offset || '';\n    } while (offset);\n    return rows;\n  }\n\n  try {\n    const conv = await listAll(T_CONV);\n    const esc = await listAll(T_ESC);\n\n    const now = new Date();\n    const start = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));\n\n    let messages_today = 0;\n    const byHour = Array(24).fill(0);\n    let voice_calls_today = 0;\n\n    for (const r of conv) {\n      const u = r.fields.updated_at;\n      const t = u ? new Date(u) : null;\n      if (!t || t < start) continue;\n      const hist = r.fields.historico;\n      let n = 0;\n      try {\n        const a = typeof hist === 'string' ? JSON.parse(hist) : hist;\n        if (Array.isArray(a)) n = a.filter((m) => m.role === 'user').length;\n      } catch (e) {\n        n = 1;\n      }\n      messages_today += n;\n      const h = t.getUTCHours();\n      byHour[h] = (byHour[h] || 0) + n;\n    }\n\n    for (const r of conv) {\n      const u = r.fields.updated_at;\n      const t = u ? new Date(u) : null;\n      if (!t || t < start) continue;\n      if (String(r.fields.canal || '').toLowerCase() === 'voz') voice_calls_today += 1;\n    }\n\n    const resolved = conv.filter((r) => String(r.fields.estado || '') === 'Resolvido').length;\n    const total = Math.max(conv.length, 1);\n    const resolution_rate = Math.round((resolved / total) * 100);\n\n    const active_escalations = esc.filter((r) => String(r.fields.estado || '') === 'Pendente').length;\n\n    return [\n      {\n        json: {\n          messages_today,\n          resolution_rate,\n          active_escalations,\n          voice_calls_today,\n          messages_by_hour: byHour,\n        },\n      },\n    ];\n  } catch (e) {\n    console.error(JSON.stringify({ scope: 'barbearia.metrics', level: 'error', message: String(e.message || e) }));\n    return [\n      {\n        json: {\n          messages_today: 0,\n          resolution_rate: 0,\n          active_escalations: 0,\n          voice_calls_today: 0,\n          messages_by_hour: Array(24).fill(0),\n          _errorCode: 'AIRTABLE_FAILED',\n        },\n      },\n    ];\n  }\n}\n\nreturn await metricsDashboard.call(this);\n"
+      },
+      "id": "e3753181-60be-49f2-b681-e76881dcb76d",
+      "name": "Code_Dashboard",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        280,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "firstIncomingItem",
+        "options": {
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Access-Control-Allow-Origin",
+                "value": "*"
+              }
+            ]
+          }
+        }
+      },
+      "id": "b4c6c988-6b4a-432a-bd8b-9f70e5c3423d",
+      "name": "Respond_JSON",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.4,
+      "position": [
+        560,
+        300
+      ]
+    }
+  ],
+  "connections": {
+    "Webhook_GET": {
+      "main": [
+        [
+          {
+            "node": "Code_Dashboard",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code_Dashboard": {
+      "main": [
+        [
+          {
+            "node": "Respond_JSON",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  }
+}

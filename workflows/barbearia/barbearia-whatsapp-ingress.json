@@ -1,0 +1,263 @@
+{
+  "name": "Barbearia — WhatsApp Ingress",
+  "meta": {
+    "templateCredsSetupCompleted": false
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "nodes": [
+    {
+      "parameters": {
+        "path": "whatsapp",
+        "multipleMethods": true,
+        "httpMethod": [
+          "GET",
+          "POST"
+        ],
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "2344ba68-b387-42e7-b3c6-66ba26f1deb6",
+      "name": "Webhook_WhatsApp",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        0,
+        300
+      ],
+      "webhookId": "barbearia-whatsapp"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "/**\n * WhatsApp ingress — Meta verify, optional Meta message-id dedupe (Airtable), chat engine + Graph send.\n *\n * Env: WHATSAPP_VERIFY_TOKEN, WHATSAPP_PHONE_NUMBER_ID, WHATSAPP_ACCESS_TOKEN, BARBEARIA_CHAT_ENGINE_URL\n * Dedupe (optional): AIRTABLE_TOKEN, AIRTABLE_BASE_ID, AIRTABLE_TBL_META_DEDUP (default META_DEDUP), DEDUPE_ENABLED=true\n */\nasync function whatsappIngress() {\n  const E = (k, d = '') => ($env[k] !== undefined && $env[k] !== '' ? $env[k] : d);\n  const http = this.helpers.httpRequest.bind(this.helpers);\n\n  const log = (level, msg, err) => {\n    const line = { ts: new Date().toISOString(), scope: 'barbearia.whatsapp', level, message: msg, err: err ? String(err.message || err) : undefined };\n    try {\n      if (level === 'error' || level === 'warn') console.error(JSON.stringify(line));\n      else console.log(JSON.stringify(line));\n    } catch (e) {}\n  };\n\n  const retryHttp = async (label, fn, opts = { max: 4, baseMs: 400 }) => {\n    let last;\n    for (let i = 0; i < opts.max; i++) {\n      try {\n        return await fn();\n      } catch (e) {\n        last = e;\n        const status = e.statusCode || e.response?.statusCode || e.status;\n        const code = typeof status === 'number' ? status : 0;\n        const retryable = !code || code === 408 || code === 429 || code >= 500;\n        log('warn', `${label} attempt ${i + 1} failed`, e);\n        if (!retryable || i === opts.max - 1) throw e;\n        await new Promise((r) => setTimeout(r, opts.baseMs * Math.pow(2, i)));\n      }\n    }\n    throw last;\n  };\n\n  const items = $input.all();\n  const root = items[0].json;\n  const q = root.query || {};\n  const body = root.body && Object.keys(root.body).length ? root.body : root;\n\n  const verifyTok = E('WHATSAPP_VERIFY_TOKEN') || 'barbearia2026';\n  const engineUrl = E('BARBEARIA_CHAT_ENGINE_URL') || 'https://senaflow.app.n8n.cloud/webhook/chat';\n  const phoneId = E('WHATSAPP_PHONE_NUMBER_ID');\n  const waToken = E('WHATSAPP_ACCESS_TOKEN');\n  const atToken = E('AIRTABLE_TOKEN');\n  const baseId = E('AIRTABLE_BASE_ID');\n  const dedupTable = E('AIRTABLE_TBL_META_DEDUP') || 'META_DEDUP';\n  const dedupeOn = String(E('DEDUPE_ENABLED') || 'true').toLowerCase() !== 'false' && atToken && baseId;\n\n  if (String(q['hub.mode'] || '') === 'subscribe') {\n    if (String(q['hub.verify_token'] || '') === verifyTok) {\n      return [{ json: { __wa: 'verify', challenge: String(q['hub.challenge'] || '') } }];\n    }\n    return [{ json: { __wa: 'forbidden' } }];\n  }\n\n  const entry = (body.entry && body.entry[0]) || (root.entry && root.entry[0]);\n  const change = entry && entry.changes && entry.changes[0];\n  const value = change && change.value;\n  const msg = value && value.messages && value.messages[0];\n\n  if (!msg) {\n    return [{ json: { __wa: 'noop' } }];\n  }\n\n  if (msg.type !== 'text' || !msg.text || !msg.text.body) {\n    return [{ json: { __wa: 'noop' } }];\n  }\n\n  const messageId = String(msg.id || '');\n  const mensagem = String(msg.text.body).trim();\n  let telefone = String(msg.from || '').trim();\n  if (telefone && !telefone.startsWith('+')) {\n    telefone = '+' + telefone.replace(/^\\+/, '');\n  }\n\n  const authHeaders = {\n    Authorization: `Bearer ${atToken}`,\n    'Content-Type': 'application/json',\n  };\n\n  const escapeFormula = (s) => {\n    const x = String(s).replace(/\\\\/g, '\\\\\\\\').replace(/'/g, \"\\\\'\");\n    return `'${x}'`;\n  };\n\n  if (dedupeOn && messageId) {\n    try {\n      const qs = new URLSearchParams();\n      qs.set('filterByFormula', `{message_id}=${escapeFormula(messageId)}`);\n      const url = `https://api.airtable.com/v0/${baseId}/${encodeURIComponent(dedupTable)}?${qs}`;\n      const res = await retryHttp('dedup.lookup', () => http({ method: 'GET', url, headers: authHeaders, json: true }));\n      if ((res.records || []).length > 0) {\n        log('info', `duplicate message_id skipped len=${messageId.length}`);\n        return [{ json: { __wa: 'noop', _reason: 'duplicate_wamid' } }];\n      }\n    } catch (e) {\n      log('warn', 'dedup lookup failed; continuing without dedupe', e);\n    }\n  }\n\n  let resposta = '';\n  try {\n    const chatRes = await retryHttp('engine', () =>\n      http({\n        method: 'POST',\n        url: engineUrl,\n        headers: { 'Content-Type': 'application/json' },\n        body: JSON.stringify({ mensagem, telefone, canal: 'whatsapp' }),\n        json: true,\n        timeout: 55000,\n      }),\n    );\n    const raw = chatRes.body !== undefined ? chatRes.body : chatRes;\n    resposta = raw.resposta || raw.body?.resposta || '';\n  } catch (e) {\n    log('error', 'chat engine call failed', e);\n    resposta = 'Lamento, não consegui processar a mensagem de momento.';\n  }\n\n  if (phoneId && waToken && resposta) {\n    const to = telefone.replace(/^\\+/, '');\n    try {\n      await retryHttp('meta.send', () =>\n        http({\n          method: 'POST',\n          url: `https://graph.facebook.com/v21.0/${phoneId}/messages`,\n          headers: { Authorization: `Bearer ${waToken}`, 'Content-Type': 'application/json' },\n          body: JSON.stringify({\n            messaging_product: 'whatsapp',\n            to,\n            type: 'text',\n            text: { body: resposta.slice(0, 4096) },\n          }),\n          json: true,\n          timeout: 30000,\n        }),\n      );\n    } catch (e) {\n      log('error', 'Meta send failed', e);\n    }\n  }\n\n  if (dedupeOn && messageId && resposta) {\n    try {\n      const url = `https://api.airtable.com/v0/${baseId}/${encodeURIComponent(dedupTable)}`;\n      await retryHttp('dedup.insert', () =>\n        http({\n          method: 'POST',\n          url,\n          headers: authHeaders,\n          body: {\n            fields: {\n              message_id: messageId,\n              telefone,\n              processed_at: new Date().toISOString(),\n            },\n          },\n          json: true,\n        }),\n      );\n    } catch (e) {\n      log('warn', 'dedup insert failed (may duplicate on retry)', e);\n    }\n  }\n\n  return [{ json: { __wa: 'done', resposta } }];\n}\n\nreturn await whatsappIngress.call(this);\n"
+      },
+      "id": "20f3782c-6b0e-440a-bfe3-62d8733c6cd4",
+      "name": "Code_WhatsApp",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        280,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "rules",
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict"
+                },
+                "conditions": [
+                  {
+                    "id": "v1",
+                    "leftValue": "={{ $json.__wa }}",
+                    "rightValue": "verify",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals",
+                      "singleValue": true
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "verify"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict"
+                },
+                "conditions": [
+                  {
+                    "id": "v2",
+                    "leftValue": "={{ $json.__wa }}",
+                    "rightValue": "noop",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals",
+                      "singleValue": true
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "noop"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict"
+                },
+                "conditions": [
+                  {
+                    "id": "v3",
+                    "leftValue": "={{ $json.__wa }}",
+                    "rightValue": "forbidden",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals",
+                      "singleValue": true
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "forbidden"
+            }
+          ]
+        },
+        "options": {
+          "fallbackOutput": "extra"
+        }
+      },
+      "id": "a170bfba-64ee-4de3-a42d-dd826e91c2e2",
+      "name": "Switch_WhatsApp",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [
+        520,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "text",
+        "responseBody": "={{ $json.challenge }}",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "id": "10393774-2d4a-4024-9d16-7269413e1a0d",
+      "name": "Respond_Verify",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.4,
+      "position": [
+        820,
+        120
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ received: true }) }}",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "id": "847f392a-5bbb-4914-affc-676f0035937c",
+      "name": "Respond_Noop",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.4,
+      "position": [
+        820,
+        260
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ ok: true, resposta: $json.resposta }) }}",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "id": "537e46b9-cd28-413d-a695-fd39cb81e06a",
+      "name": "Respond_Done",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.4,
+      "position": [
+        820,
+        420
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "text",
+        "responseBody": "Forbidden",
+        "options": {
+          "responseCode": 403
+        }
+      },
+      "id": "5cb42a0e-7c8e-494a-8836-dea83b838a81",
+      "name": "Respond_Forbidden",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.4,
+      "position": [
+        820,
+        560
+      ]
+    }
+  ],
+  "connections": {
+    "Webhook_WhatsApp": {
+      "main": [
+        [
+          {
+            "node": "Code_WhatsApp",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code_WhatsApp": {
+      "main": [
+        [
+          {
+            "node": "Switch_WhatsApp",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Switch_WhatsApp": {
+      "main": [
+        [
+          {
+            "node": "Respond_Verify",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond_Noop",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond_Forbidden",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond_Done",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  }
+}

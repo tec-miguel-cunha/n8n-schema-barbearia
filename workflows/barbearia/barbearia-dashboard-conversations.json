@@ -1,0 +1,90 @@
+{
+  "name": "Barbearia — GET Conversations",
+  "meta": {
+    "templateCredsSetupCompleted": false
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "nodes": [
+    {
+      "parameters": {
+        "path": "conversations",
+        "httpMethod": "GET",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "80987c1a-1153-4df4-9b40-0dd136281f38",
+      "name": "Webhook_GET",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        0,
+        300
+      ],
+      "webhookId": "conversations"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "/**\n * GET /webhook/conversations — last 20 CONVERSAS for dashboard feed.\n * Env: AIRTABLE_TOKEN, AIRTABLE_BASE_ID\n */\nasync function conversationsDashboard() {\n  const http = this.helpers.httpRequest.bind(this.helpers);\n  const E = (k, d = '') => ($env[k] !== undefined && $env[k] !== '' ? $env[k] : d);\n  const token = E('AIRTABLE_TOKEN');\n  const baseId = E('AIRTABLE_BASE_ID');\n  const T_CONV = E('AIRTABLE_TBL_CONVERSAS') || 'CONVERSAS';\n  const T_CLI = E('AIRTABLE_TBL_CLIENTES') || 'CLIENTES';\n  const auth = { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' };\n\n  if (!token || !baseId) {\n    console.error(JSON.stringify({ scope: 'barbearia.conversations', level: 'error', message: 'MISSING_ENV' }));\n    return [{ json: [] }];\n  }\n\n  const retryGet = async (url) => {\n    let last;\n    for (let i = 0; i < 4; i++) {\n      try {\n        return await http({ method: 'GET', url, headers: auth, json: true, timeout: 60000 });\n      } catch (e) {\n        last = e;\n        const c = e.statusCode || e.status || 0;\n        const retryable = !c || c === 429 || c >= 500;\n        if (!retryable || i === 3) throw e;\n        await new Promise((r) => setTimeout(r, 400 * Math.pow(2, i)));\n      }\n    }\n    throw last;\n  };\n\n  async function listAll(table) {\n    const rows = [];\n    let offset = '';\n    do {\n      const qs = new URLSearchParams();\n      if (offset) qs.set('offset', offset);\n      const url = `https://api.airtable.com/v0/${baseId}/${encodeURIComponent(table)}?${qs}`;\n      const res = await retryGet(url);\n      rows.push(...(res.records || []));\n      offset = res.offset || '';\n    } while (offset);\n    return rows;\n  }\n\n  function initials(name) {\n    if (!name || !String(name).trim()) return '??';\n    const p = String(name).trim().split(/\\s+/);\n    return (p[0][0] + (p[1]?.[0] || '')).toUpperCase();\n  }\n\n  function relTime(iso) {\n    if (!iso) return '';\n    const t = new Date(iso).getTime();\n    const d = Date.now() - t;\n    const m = Math.floor(d / 60000);\n    if (m < 1) return 'agora';\n    if (m < 60) return `há ${m} min`;\n    const h = Math.floor(m / 60);\n    if (h < 24) return `há ${h}h`;\n    return `há ${Math.floor(h / 24)}d`;\n  }\n\n  try {\n    const conv = await listAll(T_CONV);\n    const clientes = await listAll(T_CLI);\n    const byPhone = {};\n    for (const c of clientes) {\n      const tel = c.fields.telefone;\n      if (tel) byPhone[String(tel)] = c.fields;\n    }\n\n    const sorted = conv\n      .map((r) => ({ r, u: new Date(r.fields.updated_at || 0).getTime() }))\n      .sort((a, b) => b.u - a.u)\n      .slice(0, 20)\n      .map(({ r }) => {\n        const tel = r.fields.telefone || '';\n        const cli = byPhone[tel];\n        const nome = cli?.nome || tel.slice(-4) || 'Cliente';\n        let preview = '';\n        try {\n          const a = typeof r.fields.historico === 'string' ? JSON.parse(r.fields.historico) : r.fields.historico;\n          if (Array.isArray(a) && a.length) {\n            const last = a[a.length - 1];\n            preview = last.content || '';\n          }\n        } catch (e) {}\n        return {\n          id: r.fields.id_sessao || r.id,\n          name: nome,\n          initials: initials(cli?.nome || nome),\n          preview: String(preview).slice(0, 120),\n          status: r.fields.estado || 'Pendente',\n          time: relTime(r.fields.updated_at),\n          canal: String(r.fields.canal || 'whatsapp').toLowerCase(),\n        };\n      });\n\n    return [{ json: sorted }];\n  } catch (e) {\n    console.error(JSON.stringify({ scope: 'barbearia.conversations', level: 'error', message: String(e.message || e) }));\n    return [{ json: [] }];\n  }\n}\n\nreturn await conversationsDashboard.call(this);\n"
+      },
+      "id": "882fb30e-8a32-46c6-b61d-06ed6a99c15d",
+      "name": "Code_Dashboard",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        280,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "firstIncomingItem",
+        "options": {
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Access-Control-Allow-Origin",
+                "value": "*"
+              }
+            ]
+          }
+        }
+      },
+      "id": "77f4e62b-47e1-48fb-8f52-ca068d02883f",
+      "name": "Respond_JSON",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.4,
+      "position": [
+        560,
+        300
+      ]
+    }
+  ],
+  "connections": {
+    "Webhook_GET": {
+      "main": [
+        [
+          {
+            "node": "Code_Dashboard",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code_Dashboard": {
+      "main": [
+        [
+          {
+            "node": "Respond_JSON",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  }
+}

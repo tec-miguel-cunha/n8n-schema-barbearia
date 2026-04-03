@@ -233,8 +233,21 @@ function validateParameters(
       if (rule.type === 'fixedCollection') hasFixedCollection = true;
     }
 
-    // Check enum values (merged from all rules)
-    if (hasEnumValidation && !allEnumValues.has(value)) {
+    // Enum fields that are string[] (e.g. Webhook httpMethod when multipleMethods is true)
+    if (hasEnumValidation && Array.isArray(value)) {
+      for (let i = 0; i < value.length; i++) {
+        const item = value[i];
+        if (!allEnumValues.has(item)) {
+          errors.push({
+            path: `parameters.${field}[${i}]`,
+            message: `Invalid value for ${field}[${i}]`,
+            expected: Array.from(allEnumValues),
+            received: item,
+            hint: `Valid options: ${Array.from(allEnumValues).join(', ')}`,
+          });
+        }
+      }
+    } else if (hasEnumValidation && !Array.isArray(value) && !allEnumValues.has(value)) {
       errors.push({
         path: `parameters.${field}`,
         message: `Invalid value for ${field}`,

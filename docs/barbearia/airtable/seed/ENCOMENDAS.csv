@@ -1,0 +1,16 @@
+id,cliente_nome,cliente_tel,produto_id,produto_nome,estado,tracking,data_envio,transportadora,eta,loja_origem,valor
+E001,João Ferreira,+351912345678,P023,Kit Iniciante Barbear Clássico,Entregue,CTT123456789PT,2025-03-20,CTT,2025-03-26,Lisboa,59.90
+E002,Miguel Santos,+351923456789,P001,Wahl Magic Clip Cordless,Em trânsito,GLS987654321,2025-03-28,GLS,2025-04-03,Porto,149.90
+E003,Rui Oliveira,+351934567890,P005,Feather Artist Club SS,Em trânsito,DHL456123789,2025-03-29,DHL,2025-04-04,Alferia,89.90
+E004,Carlos Mendes,+351945678901,P006,Lâminas Feather Double Edge 100un,Processando,,2025-04-02,,2025-04-04,Lisboa,19.90
+E005,André Rodrigues,+351956789012,P004,Hey Joe! Premium Classic Razor,Entregue,CTT654321987PT,2025-03-21,CTT,2025-03-27,Porto,34.90
+E006,Tiago Costa,+351967890123,P011,TOBS Sandalwood Shaving Cream,Atrasada,GLS111222333,2025-03-25,GLS,2025-04-01,Lisboa,14.90
+E007,Pedro Alves,+351978901234,P003,Andis Master Cordless MLC,Em trânsito,DHL789456123,2025-03-30,DHL,2025-04-05,Porto,219.90
+E008,Nuno Pereira,+351989012345,P015,Pincel Barbear Pelo de Texugo,Entregue,CTT321654987PT,2025-03-19,CTT,2025-03-24,Alferia,29.90
+E009,Fábio Silva,+351990123456,P019,Pomada Captain Cook Mate,Cancelada,,,,Lisboa,11.90
+E010,Gonçalo Lima,+351901234567,P002,Babyliss Pro FX870 Skeleton,Processando,,2025-04-02,,2025-04-04,Porto,189.90
+E011,Bruno Martins,+351912345679,P023,Kit Iniciante Barbear Clássico,Em trânsito,CTT852741963PT,2025-03-31,CTT,2025-04-05,Lisboa,59.90
+E012,Sérgio Carvalho,+351923456780,P022,Navalheira de Couro Premium,Entregue,GLS369258147,2025-03-22,GLS,2025-03-28,Porto,24.90
+E013,Ricardo Nunes,+351934567891,P009,Proraso Creme Barbear Pele Sensível,Devolvida,CTT159753486PT,2025-03-18,CTT,,Lisboa,8.90
+E014,Luís Campos,+351945678902,P018,Pomada Captain Cook Fixação Suave,Em trânsito,DHL654987321,2025-03-29,DHL,2025-04-04,Alferia,11.90
+E015,Marco Sousa,+351956789013,P021,Shampoo Barba Captain Cook 250ml,Entregue,CTT741852963PT,2025-03-20,CTT,2025-03-25,Lisboa,10.90
